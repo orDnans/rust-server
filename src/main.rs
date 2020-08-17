@@ -31,16 +31,49 @@ impl Config {
     }
 }
 
-struct HandlerStruct {
-    method: String,
-    path: String,
-    handler: fn(TcpStream)
-}
+// struct HandlerStruct {
+//     method: String,
+//     path: String,
+//     handler: fn(TcpStream)
+// }
 
 /*
 should create something like ServerStruct to contain multiple HandlerStruct
 maybe B-trees
 */
+struct TreeNode {
+    method: String,
+    path: String,
+    handler: fn(TcpStream),
+    children: Vec<Option<Box<TreeNode>>>
+}
+
+impl TreeNode {
+    fn add(&mut self, method:String, path:String, handler:fn(TcpStream)) {
+
+    }
+
+    //register a GET request on a path with a specific handler
+    fn get(&self, path:String, handler:fn(TcpStream)) {
+
+    }
+
+    fn post(&self, path:String, handler:fn(TcpStream)) {
+
+    }
+
+    fn routing(&mut self, stream:TcpStream) {
+        let mut reader = BufReader::new(stream.try_clone().unwrap());
+        let mut path = String::new();
+        reader.read_line(&mut path).unwrap();
+
+        //search through tree
+    }
+}
+
+struct TreeStruct {
+
+}
 
 //routing function, should be method of ServerStruct to bind method & path to handler function
 fn routing(stream:TcpStream) {
