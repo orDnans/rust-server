@@ -2,6 +2,7 @@ use std::io::prelude::*;
 use std::io::BufReader;
 use std::fs;
 use std::net::*;
+use std::collections::BTreeMap;
 use serde::{Serialize, Deserialize};
 
 const FILENAME: &str = "config.json";
@@ -41,7 +42,7 @@ impl Config {
 should create something like ServerStruct to contain multiple HandlerStruct
 maybe B-trees
 */
-struct TreeNode {
+struct TreeNode {    
     method: String,
     path: String,
     handler: fn(TcpStream),
@@ -49,8 +50,49 @@ struct TreeNode {
 }
 
 impl TreeNode {
-    fn add(&mut self, method:String, path:String, handler:fn(TcpStream)) {
+    // fn insert(&mut self, method:String, path:String, handler:fn(TcpStream)) {
+    //     if path.starts_with(&self.path) {
+    //         let mut found : bool = false;
+    //         for &child in self.children {
+    //             match child {
+    //                 Some(tree) => if path.starts_with(&tree.path) {
+    //                     tree.insert(method, path, handler);
+    //                     found = true;
+    //                 },
+    //                 None => continue,
+    //             }
+    //         }
+    //         if found == false {
+    //             //append new tree in this tree's children vector/list
+    //             new_tree : TreeNode =  TreeNode.new()
+    //             self.children.append()
+    //         }
+    //     }
+    // }
 
+    fn insert(&mut self, path:&str, method:&str, handler: fn(TcpStream)) {
+        if path.starts_with(&self.path) {
+            let child_iter = self.children.iter_mut();
+            let mut found : bool = false;
+            for child in child_iter {
+                match child {
+                    Some(child_tree) => if path.starts_with(&child_tree.path) {
+                        child_tree.insert(path, method, handler);
+                        found = true;
+                    },
+                    None => continue,
+                }
+            }
+            if found == false {
+                let new_tree = TreeNode {
+                    path: path.to_string(),
+                    method: method.to_string(),
+                    handler: handler,
+                    children: Vec::new()
+                };
+                self.children.push(Some(Box::new(new_tree)));
+            }
+        }
     }
 
     //register a GET request on a path with a specific handler
@@ -69,10 +111,6 @@ impl TreeNode {
 
         //search through tree
     }
-}
-
-struct TreeStruct {
-
 }
 
 //routing function, should be method of ServerStruct to bind method & path to handler function
