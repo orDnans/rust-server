@@ -96,28 +96,38 @@ impl TreeNode {
     }
 
     //register a GET request on a path with a specific handler
-    fn get(&self, path:String, handler:fn(TcpStream)) {
-
+    fn get(&mut self, get_path:&str, get_handler:fn(TcpStream)) {
+        self.insert(get_path, "GET", get_handler);
     }
 
-    fn post(&self, path:String, handler:fn(TcpStream)) {
-
+    fn post(&mut self, post_path:&str, post_handler:fn(TcpStream)) {
+        self.insert(post_path, "POST", post_handler);
     }
 
-    fn routing(&mut self, stream:TcpStream) {
+    fn search(&self, path:&str, method:&str) -> Option<&fn(TcpStream)> {
+        if path.eq(&self.path) {
+            return Some(&self.handler);
+        } else if path.starts_with(&self.path) {
+            let child_iter = self.children.iter();
+            for child in child_iter {
+                match child {
+                    Some(tree_child) => return tree_child.search(path, method),
+                    None => continue,
+                }
+            }
+        }
+        None
+    }
+
+    fn routing(&self, stream:TcpStream) {
         let mut reader = BufReader::new(stream.try_clone().unwrap());
         let mut path = String::new();
         reader.read_line(&mut path).unwrap();
 
         //search through tree
+        // let handler = self.search(path: &str, method: &str);
+        // match handler {}
     }
-}
-
-//routing function, should be method of ServerStruct to bind method & path to handler function
-fn routing(stream:TcpStream) {
-    let mut reader = BufReader::new(stream.try_clone().unwrap());
-    let mut path = String::new();
-    reader.read_line(&mut path).unwrap();
 }
 
 fn main() {
