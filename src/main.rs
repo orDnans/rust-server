@@ -42,14 +42,26 @@ impl Config {
 should create something like ServerStruct to contain multiple HandlerStruct
 maybe B-trees
 */
+
+fn placeholder(_stream:TcpStream) {}
+
 struct TreeNode {    
-    method: String,
     path: String,
+    method: String,
     handler: fn(TcpStream),
     children: Vec<Option<Box<TreeNode>>>
 }
 
 impl TreeNode {
+    fn new() -> TreeNode {
+        let new_tree = TreeNode {
+            path: String::from("/"),
+            method: String::from(""),
+            handler: placeholder,
+            children: Vec::new()
+        };
+        new_tree
+    }
     // fn insert(&mut self, method:String, path:String, handler:fn(TcpStream)) {
     //     if path.starts_with(&self.path) {
     //         let mut found : bool = false;
@@ -71,6 +83,10 @@ impl TreeNode {
     // }
 
     fn insert(&mut self, path:&str, method:&str, handler: fn(TcpStream)) {
+        if path.eq(&self.path) && method.eq(&self.method){
+            self.handler = handler;
+            return;
+        }
         if path.starts_with(&self.path) {
             let child_iter = self.children.iter_mut();
             let mut found : bool = false;
@@ -123,10 +139,22 @@ impl TreeNode {
         let mut reader = BufReader::new(stream.try_clone().unwrap());
         let mut path = String::new();
         reader.read_line(&mut path).unwrap();
+        println!("{}", path);
 
-        //search through tree
-        // let handler = self.search(path: &str, method: &str);
-        // match handler {}
+        let mut handler : Option<&fn(TcpStream)> = None;
+
+        if path.starts_with("GET") {
+            let route = &path[4..path.len()-1];
+            handler = self.search(route, "GET");
+        } else if path.starts_with("POST") {
+            let route = &path[5..path.len()-1];
+            handler = self.search(route, "POST");
+        }
+
+        match handler {
+            Some(func) => func(stream),
+            None => println!("no handler"),
+        }
     }
 }
 
@@ -142,6 +170,9 @@ fn main() {
 
     //create socket
     let socket = TcpListener::bind(ip_port).unwrap();
+
+    //create routing tree
+    let router = TreeNode::new();
     
     //read stream here
     for stream in socket.incoming() {
