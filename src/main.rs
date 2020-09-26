@@ -123,7 +123,7 @@ impl TreeNode {
 
     fn search(&self, path:&str, method:&str) -> Option<&fn(TcpStream)> {
         println!("current path: {}", self.path);
-        if path.eq(&self.path) {
+        if path.eq(&self.path) && method.eq(&self.method){
             println!("found!");
             return Some(&self.handler);
         } else if path.starts_with(&self.path) {
@@ -148,11 +148,13 @@ impl TreeNode {
 
         if path.starts_with("GET") {
             println!("finding get");
-            let route = &path[4..path.len()-2];
+            let remains = &path[4..path.len()-2];
+            let route = remains.split_whitespace().next().unwrap();
             println!("path: {}", route);
             handler = self.search(route, "GET");
         } else if path.starts_with("POST") {
-            let route = &path[5..path.len()-2];
+            let remains = &path[5..path.len()-2];
+            let route = remains.split_whitespace().next().unwrap();
             handler = self.search(route, "POST");
         }
 
@@ -161,6 +163,19 @@ impl TreeNode {
             None => println!("no handler"),
         }
     }
+}
+
+fn index(mut stream: TcpStream) {
+    let contents = fs::read_to_string("index.html").unwrap();
+
+    let response = format!(
+        "HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n{}",
+        contents.len(),
+        contents
+    );
+
+    stream.write(response.as_bytes()).unwrap();
+    stream.flush().unwrap();
 }
 
 fn hello(mut stream: TcpStream) {
@@ -197,7 +212,8 @@ fn main() {
 
     //create routing tree
     let mut router = TreeNode::new();
-    router.get("/ HTTP/1.1", hello);
+    router.get("/", index);
+    router.get("/hello", hello);
     
     //read stream here
     for stream in socket.incoming() {
