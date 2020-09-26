@@ -2,7 +2,9 @@ use std::io::prelude::*;
 use std::io::BufReader;
 use std::fs;
 use std::net::*;
+// use std::collections::BTreeMap;
 use serde::{Serialize, Deserialize};
+use std::env;
 
 const FILENAME: &str = "config.json";
 
@@ -41,48 +43,143 @@ impl Config {
 should create something like ServerStruct to contain multiple HandlerStruct
 maybe B-trees
 */
-struct TreeNode {
-    method: String,
+
+fn placeholder(_stream:TcpStream) {}
+
+struct TreeNode {    
     path: String,
+    method: String,
     handler: fn(TcpStream),
     children: Vec<Option<Box<TreeNode>>>
 }
 
 impl TreeNode {
-    fn add(&mut self, method:String, path:String, handler:fn(TcpStream)) {
+    fn new() -> TreeNode {
+        let new_tree = TreeNode {
+            path: String::from("/"),
+            method: String::from(""),
+            handler: placeholder,
+            children: Vec::new()
+        };
+        new_tree
+    }
+    // fn insert(&mut self, method:String, path:String, handler:fn(TcpStream)) {
+    //     if path.starts_with(&self.path) {
+    //         let mut found : bool = false;
+    //         for &child in self.children {
+    //             match child {
+    //                 Some(tree) => if path.starts_with(&tree.path) {
+    //                     tree.insert(method, path, handler);
+    //                     found = true;
+    //                 },
+    //                 None => continue,
+    //             }
+    //         }
+    //         if found == false {
+    //             //append new tree in this tree's children vector/list
+    //             new_tree : TreeNode =  TreeNode.new()
+    //             self.children.append()
+    //         }
+    //     }
+    // }
 
+    fn insert(&mut self, path:&str, method:&str, handler: fn(TcpStream)) {
+        if path.eq(&self.path) && method.eq(&self.method){
+            self.handler = handler;
+            return;
+        }
+        if path.starts_with(&self.path) {
+            let child_iter = self.children.iter_mut();
+            let mut found : bool = false;
+            for child in child_iter {
+                match child {
+                    Some(child_tree) => if path.starts_with(&child_tree.path) {
+                        child_tree.insert(path, method, handler);
+                        found = true;
+                    },
+                    None => continue,
+                }
+            }
+            if found == false {
+                let new_tree = TreeNode {
+                    path: path.to_string(),
+                    method: method.to_string(),
+                    handler: handler,
+                    children: Vec::new()
+                };
+                self.children.push(Some(Box::new(new_tree)));
+            }
+        }
     }
 
     //register a GET request on a path with a specific handler
-    fn get(&self, path:String, handler:fn(TcpStream)) {
-
+    fn get(&mut self, get_path:&str, get_handler:fn(TcpStream)) {
+        self.insert(get_path, "GET", get_handler);
     }
 
-    fn post(&self, path:String, handler:fn(TcpStream)) {
-
+    fn post(&mut self, post_path:&str, post_handler:fn(TcpStream)) {
+        self.insert(post_path, "POST", post_handler);
     }
 
-    fn routing(&mut self, stream:TcpStream) {
+    fn search(&self, path:&str, method:&str) -> Option<&fn(TcpStream)> {
+        println!("current path: {}", self.path);
+        if path.eq(&self.path) {
+            println!("found!");
+            return Some(&self.handler);
+        } else if path.starts_with(&self.path) {
+            let child_iter = self.children.iter();
+            for child in child_iter {
+                match child {
+                    Some(tree_child) => return tree_child.search(path, method),
+                    None => continue,
+                }
+            }
+        }
+        None
+    }
+
+    fn routing(&self, stream:TcpStream) {
         let mut reader = BufReader::new(stream.try_clone().unwrap());
         let mut path = String::new();
         reader.read_line(&mut path).unwrap();
+        println!("{}", path);
 
-        //search through tree
+        let mut handler : Option<&fn(TcpStream)> = None;
+
+        if path.starts_with("GET") {
+            println!("finding get");
+            let route = &path[4..path.len()-2];
+            println!("path: {}", route);
+            handler = self.search(route, "GET");
+        } else if path.starts_with("POST") {
+            let route = &path[5..path.len()-2];
+            handler = self.search(route, "POST");
+        }
+
+        match handler {
+            Some(func) => func(stream),
+            None => println!("no handler"),
+        }
     }
 }
 
-struct TreeStruct {
+fn hello(mut stream: TcpStream) {
+    let contents = fs::read_to_string("hello.html").unwrap();
 
-}
+    let response = format!(
+        "HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n{}",
+        contents.len(),
+        contents
+    );
 
-//routing function, should be method of ServerStruct to bind method & path to handler function
-fn routing(stream:TcpStream) {
-    let mut reader = BufReader::new(stream.try_clone().unwrap());
-    let mut path = String::new();
-    reader.read_line(&mut path).unwrap();
+    stream.write(response.as_bytes()).unwrap();
+    stream.flush().unwrap();
 }
 
 fn main() {
+    let path = env::current_dir().unwrap();
+    println!("The current directory is {}", path.display());
+    
     //read json config file to str
     let json_input = fs::read_to_string(FILENAME).expect("config file not found, aborting");
     //call serde_json::from_str(&input).unwrap() to deserialize
@@ -90,16 +187,23 @@ fn main() {
 
     //create ip:port format
     let mut ip_port = server_config.ip_address.clone();
+    ip_port.push_str(":");
     ip_port.push_str(&server_config.port_number);
+
+    println!("ip_port: {}", ip_port);
 
     //create socket
     let socket = TcpListener::bind(ip_port).unwrap();
+
+    //create routing tree
+    let mut router = TreeNode::new();
+    router.get("/ HTTP/1.1", hello);
     
     //read stream here
     for stream in socket.incoming() {
         //catch errors
         let stream = stream.unwrap();
 
-        
+        router.routing(stream);
     }
 }
