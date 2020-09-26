@@ -2,8 +2,9 @@ use std::io::prelude::*;
 use std::io::BufReader;
 use std::fs;
 use std::net::*;
-use std::collections::BTreeMap;
+// use std::collections::BTreeMap;
 use serde::{Serialize, Deserialize};
+use std::env;
 
 const FILENAME: &str = "config.json";
 
@@ -121,7 +122,9 @@ impl TreeNode {
     }
 
     fn search(&self, path:&str, method:&str) -> Option<&fn(TcpStream)> {
+        println!("current path: {}", self.path);
         if path.eq(&self.path) {
+            println!("found!");
             return Some(&self.handler);
         } else if path.starts_with(&self.path) {
             let child_iter = self.children.iter();
@@ -144,10 +147,12 @@ impl TreeNode {
         let mut handler : Option<&fn(TcpStream)> = None;
 
         if path.starts_with("GET") {
-            let route = &path[4..path.len()-1];
+            println!("finding get");
+            let route = &path[4..path.len()-2];
+            println!("path: {}", route);
             handler = self.search(route, "GET");
         } else if path.starts_with("POST") {
-            let route = &path[5..path.len()-1];
+            let route = &path[5..path.len()-2];
             handler = self.search(route, "POST");
         }
 
@@ -158,7 +163,23 @@ impl TreeNode {
     }
 }
 
+fn hello(mut stream: TcpStream) {
+    let contents = fs::read_to_string("hello.html").unwrap();
+
+    let response = format!(
+        "HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n{}",
+        contents.len(),
+        contents
+    );
+
+    stream.write(response.as_bytes()).unwrap();
+    stream.flush().unwrap();
+}
+
 fn main() {
+    let path = env::current_dir().unwrap();
+    println!("The current directory is {}", path.display());
+    
     //read json config file to str
     let json_input = fs::read_to_string(FILENAME).expect("config file not found, aborting");
     //call serde_json::from_str(&input).unwrap() to deserialize
@@ -166,19 +187,23 @@ fn main() {
 
     //create ip:port format
     let mut ip_port = server_config.ip_address.clone();
+    ip_port.push_str(":");
     ip_port.push_str(&server_config.port_number);
+
+    println!("ip_port: {}", ip_port);
 
     //create socket
     let socket = TcpListener::bind(ip_port).unwrap();
 
     //create routing tree
-    let router = TreeNode::new();
+    let mut router = TreeNode::new();
+    router.get("/ HTTP/1.1", hello);
     
     //read stream here
     for stream in socket.incoming() {
         //catch errors
         let stream = stream.unwrap();
 
-        
+        router.routing(stream);
     }
 }
